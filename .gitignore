@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Build outputs
+artifacts/
+cache/
+typechain-types/
+dist/
+.next/
+out/
+
+# Environment files (contain secrets)
+.env
+.env.local
+.env.*.local
+
+# IDEs
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Hardhat
+cache/
+artifacts/
+
+# Go
+*.exe
+*.dll
+*.so
+*.dylib
+flarelink-relayer/data/
+
+# Test coverage
+coverage/
+*.lcov
+
+# Package lock (optional - some prefer to commit this)
+# package-lock.json
