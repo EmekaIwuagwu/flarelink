@@ -6,6 +6,16 @@ import { usePublicClient, useAccount } from 'wagmi';
 import Link from 'next/link';
 import { ethers } from 'ethers';
 
+// Extend Window interface for ethereum
+declare global {
+    interface Window {
+        ethereum?: {
+            request: (args: { method: string; params?: unknown[] | object }) => Promise<unknown>;
+        };
+    }
+}
+
+
 interface BridgeStatus {
     step: 'locked' | 'executing' | 'completed' | 'failed';
     sourceTxHash: string;

@@ -2,12 +2,12 @@ package consensus
 
 import (
 	"crypto/ecdsa"
-	"fmt"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 )
+
 
 // Validator manages the relayer's identity and signature verification
 type Validator struct {
