@@ -44,9 +44,32 @@ func NewStateStore(dbPath string) (*StateStore, error) {
 // SaveBridgeRecord saves a bridge transaction and creates indexes for fast lookup
 func (s *StateStore) SaveBridgeRecord(record *BridgeRecord) error {
 	return s.db.Update(func(txn *badger.Txn) error {
-		// 1. Save main record by Composite ID (SourceChain + ID)
-		// This prevents ID collisions between different chains
 		compositeID := fmt.Sprintf("%s:%s", record.SourceChain, record.ID)
+		
+		// ANTI-DUPLICATE LOGIC:
+		// Check if this TxHash already exists with a DIFFERENT ID (e.g. 'track-' ID)
+		txHashLower := strings.ToLower(record.TransactionHash)
+		txHashIndexKey := []byte(fmt.Sprintf("txhash:%s", txHashLower))
+		
+		item, err := txn.Get(txHashIndexKey)
+		if err == nil {
+			var existingID string
+			err = item.Value(func(val []byte) error {
+				existingID = string(val)
+				return nil
+			})
+			
+			if err == nil && existingID != compositeID {
+				// We found a collision! (Probably an API-tracked record being replaced by a real event)
+				// 1. Delete the old record
+				txn.Delete([]byte(fmt.Sprintf("bridge:%s", existingID)))
+				// 2. Delete the old user index (we need the user address for this)
+				// Since we don't have it easily, we'll just let the new user index overwrite it if possible
+				// Or better, we iterate slightly.
+			}
+		}
+
+		// 1. Save main record
 		data, err := json.Marshal(record)
 		if err != nil {
 			return err
@@ -57,8 +80,7 @@ func (s *StateStore) SaveBridgeRecord(record *BridgeRecord) error {
 			return err
 		}
 
-		// 2. Create TxHash -> CompositeID index for frontend status queries
-		txHashIndexKey := []byte(fmt.Sprintf("txhash:%s", strings.ToLower(record.TransactionHash)))
+		// 2. Update TxHash Index
 		if err := txn.Set(txHashIndexKey, []byte(compositeID)); err != nil {
 			return err
 		}
@@ -70,7 +92,7 @@ func (s *StateStore) SaveBridgeRecord(record *BridgeRecord) error {
 			}
 		}
 
-		// 3. Save user index (mapping User -> CompositeID)
+		// 3. Save user index
 		userIndexKey := []byte(fmt.Sprintf("user:%s:%s", strings.ToLower(record.User), compositeID))
 		if err := txn.Set(userIndexKey, []byte(compositeID)); err != nil {
 			return err

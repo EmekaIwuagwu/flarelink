@@ -137,6 +137,9 @@ func main() {
 				TransactionHashAlias: event.TransactionHash.Hex(),
 				Timestamp:            event.Timestamp.Unix(),
 			}
+
+			// If the existing record was a 'track-' record, we might want to cleanup or link them
+			// For simplicity, we just save the real one. The GetBridgeRecord logic will prefer TxHash lookup.
 			store.SaveBridgeRecord(record)
 
 			// 1. Sign

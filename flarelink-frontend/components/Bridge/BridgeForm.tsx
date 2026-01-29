@@ -304,11 +304,33 @@ export default function BridgeForm() {
 
   const { isLoading: isBridgeTxLoading } = useWaitForTransaction({
     hash: bridgeData?.hash,
-    onSuccess: () => {
+    onSuccess: (receipt) => {
       setModalStep('success');
       setModalTitle('Bridge Transfer Initiated!');
       setModalDescription('Your tokens are being bridged. The relayer will complete the transfer on the destination chain.');
       refetchBalance();
+
+      // NEW: Notify relayer instantly so the transaction appears in history immediately
+      try {
+        const baseUrl = process.env.NEXT_PUBLIC_RELAYER_API_URL || 'http://localhost:8080/api/v1';
+        fetch(`${baseUrl}/bridge/track`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            txHash: bridgeData?.hash,
+            sourceTxHash: bridgeData?.hash,
+            user: address,
+            amount: amountBI.toString(),
+            sourceChain: sourceChain.name,
+            destChain: destChain.name,
+            tokenAddress: tokenAddress,
+            status: 'locked',
+            timestamp: Math.floor(Date.now() / 1000)
+          })
+        });
+      } catch (e) {
+        console.error('Failed to track bridge:', e);
+      }
     },
     onError: (err) => {
       setModalStep('error');
