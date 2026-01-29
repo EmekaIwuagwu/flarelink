@@ -13,6 +13,8 @@ interface BridgeRecord {
     amount: string;
     status: string;
     txHash: string;
+    destTxHash?: string;
+    tokenSymbol?: string;
     timestamp: number;
 }
 
@@ -31,17 +33,19 @@ const getChainColor = (chain: string) => {
     return '#888888';
 };
 
-const getExplorerLink = (tx: BridgeRecord) => {
-    if (tx.sourceChain.toLowerCase().includes('avalanche')) {
-        return `https://testnet.snowtrace.io/tx/${tx.txHash}`;
-    } else if (tx.sourceChain.toLowerCase().includes('flare')) {
-        return `https://coston2-explorer.flare.network/tx/${tx.txHash}`;
-    } else if (tx.sourceChain.toLowerCase().includes('polygon')) {
-        return `https://www.oklink.com/amoy/tx/${tx.txHash}`;
-    } else if (tx.sourceChain.toLowerCase().includes('ethereum')) {
-        return `https://sepolia.etherscan.io/tx/${tx.txHash}`;
+const getExplorerLink = (chainName: string, hash: string) => {
+    if (!hash) return null;
+    const chain = chainName.toLowerCase();
+    if (chain.includes('avalanche')) {
+        return `https://testnet.snowtrace.io/tx/${hash}`;
+    } else if (chain.includes('flare')) {
+        return `https://coston2-explorer.flare.network/tx/${hash}`;
+    } else if (chain.includes('polygon')) {
+        return `https://amoy.polygonscan.com/tx/${hash}`;
+    } else if (chain.includes('ethereum')) {
+        return `https://sepolia.etherscan.io/tx/${hash}`;
     }
-    return `https://testnet.snowtrace.io/tx/${tx.txHash}`;
+    return null;
 };
 
 const getStatusConfig = (status: string) => {
@@ -81,7 +85,10 @@ export default function BridgeHistory() {
             const res = await fetch(`${baseUrl}/bridge/user/${address}`);
             const data = await res.json();
             if (data.data) {
-                setHistory(data.data);
+                const results = data.data as BridgeRecord[];
+                // Sort by timestamp descending (newest first)
+                results.sort((a, b) => b.timestamp - a.timestamp);
+                setHistory(results);
                 setError(null);
             }
         } catch (err) {
@@ -108,21 +115,26 @@ export default function BridgeHistory() {
                 <h2 className="text-xl font-bold text-white flex items-center gap-3">
                     <span>📜</span> Bridge Activity
                 </h2>
-                <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={fetchHistory}
-                    disabled={loading}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-sm text-gray-400 hover:text-white hover:bg-white/10 transition-all disabled:opacity-50"
-                >
-                    <motion.span
-                        animate={loading ? { rotate: 360 } : {}}
-                        transition={{ duration: 1, repeat: loading ? Infinity : 0, ease: 'linear' }}
+                <div className="flex items-center gap-4">
+                    <span className="text-xs text-gray-500 bg-white/5 px-3 py-1 rounded-full border border-white/10">
+                        Total: {history.length} Transactions
+                    </span>
+                    <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={fetchHistory}
+                        disabled={loading}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-sm text-gray-400 hover:text-white hover:bg-white/10 transition-all disabled:opacity-50"
                     >
-                        ↻
-                    </motion.span>
-                    Refresh
-                </motion.button>
+                        <motion.span
+                            animate={loading ? { rotate: 360 } : {}}
+                            transition={{ duration: 1, repeat: loading ? Infinity : 0, ease: 'linear' }}
+                        >
+                            ↻
+                        </motion.span>
+                        Refresh
+                    </motion.button>
+                </div>
             </div>
 
             {/* Error State */}
@@ -166,17 +178,21 @@ export default function BridgeHistory() {
                     <table className="w-full">
                         <thead>
                             <tr className="border-b border-white/5">
-                                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">ID</th>
+                                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Time</th>
                                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Route</th>
                                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Amount</th>
                                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Explorer</th>
+                                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Activity</th>
                             </tr>
                         </thead>
                         <tbody>
                             <AnimatePresence>
                                 {history.map((tx, i) => {
                                     const statusConfig = getStatusConfig(tx.status);
+                                    const sourceLink = getExplorerLink(tx.sourceChain, tx.txHash);
+                                    const destLink = getExplorerLink(tx.destChain, tx.destTxHash || '');
+                                    const date = new Date(tx.timestamp * 1000).toLocaleString();
+
                                     return (
                                         <motion.tr
                                             key={tx.id}
@@ -185,61 +201,59 @@ export default function BridgeHistory() {
                                             transition={{ delay: i * 0.05 }}
                                             className="border-b border-white/5 hover:bg-white/[0.02] transition-colors"
                                         >
-                                            {/* ID */}
+                                            {/* Time */}
                                             <td className="px-4 py-4">
-                                                <span className="text-xs font-mono text-gray-400">
-                                                    #{tx.id.substring(0, 8)}...
-                                                </span>
+                                                <div className="flex flex-col">
+                                                    <span className="text-white text-sm">{date.split(',')[0]}</span>
+                                                    <span className="text-gray-500 text-xs">{date.split(',')[1]}</span>
+                                                </div>
                                             </td>
 
                                             {/* Route */}
                                             <td className="px-4 py-4">
                                                 <div className="flex items-center gap-2">
-                                                    <span
-                                                        className="w-2 h-2 rounded-full"
-                                                        style={{ backgroundColor: getChainColor(tx.sourceChain) }}
-                                                    />
-                                                    <span className="text-white font-medium text-sm">{tx.sourceChain}</span>
-                                                    <span className="text-gray-600">→</span>
-                                                    <span
-                                                        className="w-2 h-2 rounded-full"
-                                                        style={{ backgroundColor: getChainColor(tx.destChain) }}
-                                                    />
-                                                    <span className="text-white font-medium text-sm">{tx.destChain}</span>
+                                                    <div className="flex flex-col">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: getChainColor(tx.sourceChain) }} />
+                                                            <span className="text-white text-sm">{tx.sourceChain}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 mt-1">
+                                                            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: getChainColor(tx.destChain) }} />
+                                                            <span className="text-gray-400 text-xs">{tx.destChain}</span>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </td>
 
                                             {/* Amount */}
                                             <td className="px-4 py-4">
                                                 <span className="text-white font-semibold">
-                                                    {parseFloat(ethers.formatUnits(tx.amount || '0', 18)).toFixed(4)}
+                                                    {parseFloat(ethers.formatUnits(tx.amount || '0', 18)).toFixed(2)}
                                                 </span>
-                                                <span className="text-gray-500 text-sm ml-1">FLT</span>
+                                                <span className="text-red-500 text-xs font-bold ml-1">{tx.tokenSymbol || 'FLT'}</span>
                                             </td>
 
                                             {/* Status */}
                                             <td className="px-4 py-4">
-                                                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold uppercase ${statusConfig.bg} ${statusConfig.border} border`} style={{ color: statusConfig.color }}>
-                                                    <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: statusConfig.color }} />
+                                                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase ${statusConfig.bg} ${statusConfig.border} border`} style={{ color: statusConfig.color }}>
                                                     {statusConfig.label}
                                                 </span>
                                             </td>
 
-                                            {/* Explorer */}
+                                            {/* Links */}
                                             <td className="px-4 py-4">
-                                                <motion.a
-                                                    href={getExplorerLink(tx)}
-                                                    target="_blank"
-                                                    rel="noreferrer"
-                                                    whileHover={{ scale: 1.02 }}
-                                                    whileTap={{ scale: 0.98 }}
-                                                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-gray-400 hover:text-white hover:bg-white/10 transition-all"
-                                                >
-                                                    View
-                                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                                    </svg>
-                                                </motion.a>
+                                                <div className="flex flex-col gap-2">
+                                                    {sourceLink && (
+                                                        <a href={sourceLink} target="_blank" rel="noreferrer" className="text-[10px] text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1">
+                                                            Source TX ↗
+                                                        </a>
+                                                    )}
+                                                    {destLink && (
+                                                        <a href={destLink} target="_blank" rel="noreferrer" className="text-[10px] text-green-400 hover:text-green-300 transition-colors flex items-center gap-1">
+                                                            Dest TX ↗
+                                                        </a>
+                                                    )}
+                                                </div>
                                             </td>
                                         </motion.tr>
                                     );

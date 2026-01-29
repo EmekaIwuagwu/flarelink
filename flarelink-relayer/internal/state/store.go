@@ -63,7 +63,8 @@ func (s *StateStore) SaveBridgeRecord(record *BridgeRecord) error {
 		}
 
 		// 3. Save user index (mapping User -> BridgeID)
-		userIndexKey := []byte(fmt.Sprintf("user:%s:%s", record.User, record.ID))
+		// Force lowercase to ensure case-insensitive lookup
+		userIndexKey := []byte(fmt.Sprintf("user:%s:%s", strings.ToLower(record.User), record.ID))
 		if err := txn.Set(userIndexKey, []byte(record.ID)); err != nil {
 			return err
 		}
@@ -120,23 +121,30 @@ func (s *StateStore) GetBridgeRecord(idOrTxHash string) (*BridgeRecord, error) {
 // ListUserBridges returns all bridge transactions for a given user address
 func (s *StateStore) ListUserBridges(userAddress string) ([]*BridgeRecord, error) {
 	var records []*BridgeRecord
+	searchAddr := strings.ToLower(userAddress)
+
 	err := s.db.View(func(txn *badger.Txn) error {
 		it := txn.NewIterator(badger.DefaultIteratorOptions)
 		defer it.Close()
 		
-		prefix := []byte(fmt.Sprintf("user:%s:", userAddress))
+		prefix := []byte("user:")
 		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
 			item := it.Item()
-			err := item.Value(func(val []byte) error {
-				bridgeID := string(val)
-				record, err := s.GetBridgeRecord(bridgeID)
-				if err == nil {
-					records = append(records, record)
+			key := item.Key()
+			// Key format: user:ADDRESS:ID
+			parts := strings.Split(string(key), ":")
+			if len(parts) >= 3 && strings.ToLower(parts[1]) == searchAddr {
+				err := item.Value(func(val []byte) error {
+					bridgeID := string(val)
+					record, err := s.GetBridgeRecord(bridgeID)
+					if err == nil {
+						records = append(records, record)
+					}
+					return nil
+				})
+				if err != nil {
+					return err
 				}
-				return nil
-			})
-			if err != nil {
-				return err
 			}
 		}
 		return nil

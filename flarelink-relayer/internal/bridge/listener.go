@@ -82,7 +82,7 @@ func NewChainListener(
 		erc20ABI:     erc20ABI,
 		chainID:      chainID,
 		chainName:    chainName,
-		eventChan:    make(chan BridgeEvent, 100),
+		eventChan:    make(chan BridgeEvent, 1000), // Increased buffer to prevent dropping events
 		blockTracker: big.NewInt(0),
 		ctx:          ctx,
 		cancel:       cancel,
