@@ -125,7 +125,7 @@ func main() {
 				ID:                   event.BridgeID.String(),
 				SourceChain:          getChainName(event.SourceChain),
 				DestChain:            getChainName(event.DestinationChain),
-				User:                 event.User.Hex(),
+				User:                 strings.ToLower(event.User.Hex()),
 				Token:                event.TokenAddress.Hex(),
 				TokenName:            event.TokenName,
 				TokenSymbol:          event.TokenSymbol,

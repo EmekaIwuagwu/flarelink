@@ -100,7 +100,7 @@ func (cl *ChainListener) Start(ctx context.Context) error {
 func (cl *ChainListener) listenLoop(ctx context.Context) {
 	defer cl.wg.Done()
 	
-	ticker := time.NewTicker(12 * time.Second) // Poll every 12 seconds
+	ticker := time.NewTicker(2 * time.Second) // Poll every 2 seconds for faster updates
 	defer ticker.Stop()
 
 	latestBlock, _ := cl.client.BlockNumber(ctx)

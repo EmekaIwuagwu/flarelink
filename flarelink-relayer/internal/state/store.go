@@ -44,28 +44,35 @@ func NewStateStore(dbPath string) (*StateStore, error) {
 // SaveBridgeRecord saves a bridge transaction and creates indexes for fast lookup
 func (s *StateStore) SaveBridgeRecord(record *BridgeRecord) error {
 	return s.db.Update(func(txn *badger.Txn) error {
-		// 1. Save main record by BridgeID
+		// 1. Save main record by Composite ID (SourceChain + ID)
+		// This prevents ID collisions between different chains
+		compositeID := fmt.Sprintf("%s:%s", record.SourceChain, record.ID)
 		data, err := json.Marshal(record)
 		if err != nil {
 			return err
 		}
 		
-		recordKey := []byte(fmt.Sprintf("bridge:%s", record.ID))
+		recordKey := []byte(fmt.Sprintf("bridge:%s", compositeID))
 		if err := txn.Set(recordKey, data); err != nil {
 			return err
 		}
 
-		// 2. Create TxHash -> BridgeID index for frontend status queries
-		// Force lowercase to match the case-insensitive lookup in GetBridgeRecord
+		// 2. Create TxHash -> CompositeID index for frontend status queries
 		txHashIndexKey := []byte(fmt.Sprintf("txhash:%s", strings.ToLower(record.TransactionHash)))
-		if err := txn.Set(txHashIndexKey, []byte(record.ID)); err != nil {
+		if err := txn.Set(txHashIndexKey, []byte(compositeID)); err != nil {
 			return err
 		}
 
-		// 3. Save user index (mapping User -> BridgeID)
-		// Force lowercase to ensure case-insensitive lookup
-		userIndexKey := []byte(fmt.Sprintf("user:%s:%s", strings.ToLower(record.User), record.ID))
-		if err := txn.Set(userIndexKey, []byte(record.ID)); err != nil {
+		if record.DestTransactionHash != "" {
+			destHashKey := []byte(fmt.Sprintf("txhash:%s", strings.ToLower(record.DestTransactionHash)))
+			if err := txn.Set(destHashKey, []byte(compositeID)); err != nil {
+				return err
+			}
+		}
+
+		// 3. Save user index (mapping User -> CompositeID)
+		userIndexKey := []byte(fmt.Sprintf("user:%s:%s", strings.ToLower(record.User), compositeID))
+		if err := txn.Set(userIndexKey, []byte(compositeID)); err != nil {
 			return err
 		}
 
@@ -73,33 +80,32 @@ func (s *StateStore) SaveBridgeRecord(record *BridgeRecord) error {
 	})
 }
 
-// GetBridgeRecord retrieves a bridge transaction by ID or TxHash
+// GetBridgeRecord retrieves a bridge transaction by (Composite ID) or TxHash
 func (s *StateStore) GetBridgeRecord(idOrTxHash string) (*BridgeRecord, error) {
-	// Normalize lookup key to lowercase for case-insensitive hash matching
 	idOrTxHash = strings.ToLower(idOrTxHash)
 	
 	var record BridgeRecord
 	err := s.db.View(func(txn *badger.Txn) error {
-		// Check if this is a transaction hash (starts with 0x)
 		lookupKey := fmt.Sprintf("bridge:%s", idOrTxHash)
+		
+		// If it's a TxHash, look up the composite ID first
 		if len(idOrTxHash) > 2 && idOrTxHash[:2] == "0x" {
-			// This is a TxHash - first resolve to BridgeID
 			txHashKey := []byte(fmt.Sprintf("txhash:%s", idOrTxHash))
 			item, err := txn.Get(txHashKey)
 			if err != nil {
 				return err
 			}
 			
-			var bridgeID string
+			var compositeID string
 			err = item.Value(func(val []byte) error {
-				bridgeID = string(val)
+				compositeID = string(val)
 				return nil
 			})
 			if err != nil {
 				return err
 			}
 			
-			lookupKey = fmt.Sprintf("bridge:%s", bridgeID)
+			lookupKey = fmt.Sprintf("bridge:%s", compositeID)
 		}
 		
 		item, err := txn.Get([]byte(lookupKey))
@@ -119,6 +125,7 @@ func (s *StateStore) GetBridgeRecord(idOrTxHash string) (*BridgeRecord, error) {
 }
 
 // ListUserBridges returns all bridge transactions for a given user address
+// ListUserBridges returns all bridge transactions for a given user address
 func (s *StateStore) ListUserBridges(userAddress string) ([]*BridgeRecord, error) {
 	var records []*BridgeRecord
 	searchAddr := strings.ToLower(userAddress)
@@ -127,24 +134,20 @@ func (s *StateStore) ListUserBridges(userAddress string) ([]*BridgeRecord, error
 		it := txn.NewIterator(badger.DefaultIteratorOptions)
 		defer it.Close()
 		
-		prefix := []byte("user:")
+		// Iterate through all records for this user using the index
+		prefix := []byte(fmt.Sprintf("user:%s:", searchAddr))
 		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
 			item := it.Item()
-			key := item.Key()
-			// Key format: user:ADDRESS:ID
-			parts := strings.Split(string(key), ":")
-			if len(parts) >= 3 && strings.ToLower(parts[1]) == searchAddr {
-				err := item.Value(func(val []byte) error {
-					bridgeID := string(val)
-					record, err := s.GetBridgeRecord(bridgeID)
-					if err == nil {
-						records = append(records, record)
-					}
-					return nil
-				})
-				if err != nil {
-					return err
+			err := item.Value(func(val []byte) error {
+				compositeID := string(val)
+				record, err := s.GetBridgeRecord(compositeID)
+				if err == nil {
+					records = append(records, record)
 				}
+				return nil
+			})
+			if err != nil {
+				return err
 			}
 		}
 		return nil
