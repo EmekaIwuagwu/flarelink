@@ -124,6 +124,7 @@ export default function BridgeForm() {
   const [modalTitle, setModalTitle] = useState('');
   const [modalDescription, setModalDescription] = useState('');
   const [modalTxHash, setModalTxHash] = useState<string | undefined>();
+  const [destTxHash, setDestTxHash] = useState<string | undefined>();
   const [modalError, setModalError] = useState<string | undefined>();
   const [currentAction, setCurrentAction] = useState<'approve' | 'bridge' | null>(null);
 
@@ -403,6 +404,40 @@ export default function BridgeForm() {
     }
   }, [bridgeData?.hash]);
 
+  // ============ POLL RELAYER STATUS ============
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+
+    if (modalStep === 'success' && currentAction === 'bridge' && bridgeData?.hash) {
+      const pollRelayer = async () => {
+        try {
+          const baseUrl = process.env.NEXT_PUBLIC_RELAYER_API_URL || 'http://localhost:8080/api/v1';
+          const res = await fetch(`${baseUrl}/bridge/status/${bridgeData.hash}`);
+          if (res.ok) {
+            const result = await res.json();
+            const record = result.data;
+
+            if (record && record.destTxHash) {
+              setModalTitle('Bridge Completion Successful!');
+              setModalDescription(`Transfer completed! Your tokens have been minted on ${record.destChain}.`);
+              setDestTxHash(record.destTxHash);
+              clearInterval(interval);
+            }
+          }
+        } catch (e) {
+          console.error('Polling error:', e);
+        }
+      };
+
+      interval = setInterval(pollRelayer, 5000);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [modalStep, currentAction, bridgeData?.hash]);
+
   // ============ MODAL CLOSE/RETRY ============
 
   const handleModalClose = () => {
@@ -411,6 +446,7 @@ export default function BridgeForm() {
       resetApprove();
     } else if (currentAction === 'bridge') {
       resetBridge();
+      setDestTxHash(undefined);
     }
     setCurrentAction(null);
   };
@@ -470,7 +506,7 @@ export default function BridgeForm() {
         onClose={handleModalClose}
         onRetry={handleRetry}
         explorerUrl={modalTxHash ? `${sourceChain.explorerUrl}${modalTxHash}` : undefined}
-        destExplorerUrl={modalTxHash ? `${destChain.explorerUrl}` : undefined}
+        destExplorerUrl={destTxHash ? `${destChain.explorerUrl}${destTxHash}` : undefined}
       />
 
       <div className={styles.bridgeContainer}>
