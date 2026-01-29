@@ -56,7 +56,7 @@ const CHAINS: Record<string, ChainConfig> = {
     symbol: 'MATIC',
     bridgeAddress: (process.env.NEXT_PUBLIC_BRIDGE_ADDRESS_AMOY || '0x2B53AF2fF168345C409da33d5cc68270F2905cA7') as `0x${string}`,
     tokenAddress: '0xEbd238521aabd9834A1be844a4eBE1acA820b416' as `0x${string}`,
-    explorerUrl: 'https://www.oklink.com/amoy/tx/',
+    explorerUrl: 'https://amoy.polygonscan.com/tx/',
   },
 };
 
