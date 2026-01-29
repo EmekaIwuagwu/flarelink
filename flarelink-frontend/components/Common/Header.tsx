@@ -1,41 +1,40 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useAccount, useDisconnect, useBalance, useConnect, useNetwork } from 'wagmi';
-import styles from '@/styles/bridge.module.css';
+import { motion, AnimatePresence } from 'framer-motion';
 import NetworkSelector from './NetworkSelector';
-
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 
 export default function Header() {
     const router = useRouter();
+    const pathname = usePathname();
     const { address, isConnected } = useAccount();
     const { disconnect } = useDisconnect();
-    const { connect, connectors, isLoading, pendingConnector } = useConnect();
+    const { connect, connectors, isLoading } = useConnect();
     const { chain } = useNetwork();
     const { data: balance, refetch: refetchBalance } = useBalance({
         address,
         watch: true,
-        chainId: chain?.id, // Explicitly use current chain
+        chainId: chain?.id,
     });
 
-    const [isMounted, setIsMounted] = React.useState(false);
+    const [isMounted, setIsMounted] = useState(false);
+    const [showLogoutModal, setShowLogoutModal] = useState(false);
+    const [showConnectModal, setShowConnectModal] = useState(false);
+    const [scrolled, setScrolled] = useState(false);
 
-    React.useEffect(() => {
+    useEffect(() => {
         setIsMounted(true);
+        const handleScroll = () => setScrolled(window.scrollY > 20);
+        window.addEventListener('scroll', handleScroll);
+        return () => window.removeEventListener('scroll', handleScroll);
     }, []);
 
-    // Refetch balance when chain changes
-    React.useEffect(() => {
-        if (chain?.id) {
-            refetchBalance();
-        }
+    useEffect(() => {
+        if (chain?.id) refetchBalance();
     }, [chain?.id, refetchBalance]);
-
-
-    const [showLogoutModal, setShowLogoutModal] = React.useState(false);
-    const [showConnectModal, setShowConnectModal] = React.useState(false);
 
     const handleLogout = () => {
         disconnect();
@@ -43,187 +42,262 @@ export default function Header() {
         router.push('/disconnect');
     };
 
-    const handleConnectClick = () => {
-        setShowConnectModal(true);
-    };
-
     const executeConnect = (connector: any) => {
         connect({ connector });
         setShowConnectModal(false);
     };
 
-    // Formatting address 0x1234...5678
-    const formatAddress = (addr: string) => {
-        return `${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}`;
-    };
+    const formatAddress = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 
-    if (!isMounted) return null; // Prevent hydration mismatch
+    if (!isMounted) return null;
+
+    const navLinks = isConnected
+        ? [
+            { href: '/dashboard', label: 'Overview' },
+            { href: '/dashboard/transfer', label: 'Bridge' },
+            { href: '/dashboard/history', label: 'History' },
+            { href: '/dashboard/settings', label: 'Settings' },
+        ]
+        : [
+            { href: '/about', label: 'About' },
+            { href: '/features', label: 'Features' },
+            { href: '/security', label: 'Security' },
+            { href: '/faq', label: 'FAQ' },
+        ];
 
     return (
         <>
-            <nav style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '20px 40px',
-                background: 'rgba(13, 13, 13, 0.9)',
-                borderBottom: '1px solid rgba(220, 20, 60, 0.2)',
-                position: 'fixed',
-                top: 0,
-                left: 0,
-                right: 0,
-                zIndex: 50,
-                backdropFilter: 'blur(10px)'
-            }}>
-                {/* Logo Area */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                    <div style={{
-                        width: '32px',
-                        height: '32px',
-                        background: 'linear-gradient(135deg, #DC143C, #8B0000)',
-                        borderRadius: '8px'
-                    }}></div>
-                    <Link href="/" style={{
-                        fontSize: '24px',
-                        fontWeight: '900',
-                        color: '#E8E8E8',
-                        textDecoration: 'none',
-                        letterSpacing: '-0.5px'
-                    }}>
-                        FLARE<span style={{ color: '#DC143C' }}>LINK</span>
+            <motion.nav
+                initial={{ y: -100 }}
+                animate={{ y: 0 }}
+                transition={{ type: 'spring', damping: 20, stiffness: 100 }}
+                className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled
+                        ? 'bg-black/90 backdrop-blur-xl border-b border-white/5 shadow-lg'
+                        : 'bg-transparent'
+                    }`}
+            >
+                <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+                    {/* Logo */}
+                    <Link href="/" className="flex items-center gap-3 group">
+                        <motion.div
+                            whileHover={{ rotate: 180 }}
+                            transition={{ duration: 0.5 }}
+                            className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500 to-red-900 flex items-center justify-center shadow-lg shadow-red-500/20"
+                        >
+                            <span className="text-white font-bold text-lg">F</span>
+                        </motion.div>
+                        <span className="text-2xl font-bold tracking-tight">
+                            <span className="text-white">FLARE</span>
+                            <span className="text-red-500">LINK</span>
+                        </span>
                     </Link>
-                </div>
 
-                {/* Navigation Links - Dynamic based on Auth */}
-                <div className="hidden md:flex gap-8 font-medium">
-                    {isConnected ? (
-                        <>
-                            <Link href="/dashboard" className="text-gray-300 hover:text-white transition-colors">Overview</Link>
-                            <Link href="/dashboard/transfer" className="text-gray-300 hover:text-white transition-colors">Transfer</Link>
-                            <Link href="/dashboard/history" className="text-gray-300 hover:text-white transition-colors">History</Link>
-                            <Link href="/dashboard/settings" className="text-gray-300 hover:text-white transition-colors">Settings</Link>
-                        </>
-                    ) : (
-                        <>
-                            <Link href="/about" className="text-gray-300 hover:text-white transition-colors">About</Link>
-                            <Link href="/features" className="text-gray-300 hover:text-white transition-colors">Features</Link>
-                            <Link href="/security" className="text-gray-300 hover:text-white transition-colors">Security</Link>
-                            <Link href="/faq" className="text-gray-300 hover:text-white transition-colors">FAQ</Link>
-                        </>
-                    )}
-                </div>
+                    {/* Navigation Links */}
+                    <div className="hidden md:flex items-center gap-1">
+                        {navLinks.map((link) => {
+                            const isActive = pathname === link.href || (link.href !== '/' && pathname?.startsWith(link.href));
+                            return (
+                                <Link
+                                    key={link.href}
+                                    href={link.href}
+                                    className={`relative px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${isActive
+                                            ? 'text-white'
+                                            : 'text-gray-400 hover:text-white hover:bg-white/5'
+                                        }`}
+                                >
+                                    {link.label}
+                                    {isActive && (
+                                        <motion.div
+                                            layoutId="activeNav"
+                                            className="absolute inset-0 bg-white/10 rounded-lg -z-10"
+                                            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                                        />
+                                    )}
+                                </Link>
+                            );
+                        })}
+                    </div>
 
-                {/* User Profile / Connect */}
-                <div>
-                    {isConnected && address ? (
-                        <div className="flex items-center gap-4">
-                            {/* Balance Pill */}
-                            <div className="glass-panel px-4 py-2 flex items-center gap-2 text-sm text-gray-300 hidden md:flex">
-                                <span className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_10px_#22c55e]"></span>
-                                {balance?.formatted.substring(0, 5)} {balance?.symbol}
+                    {/* Right Side Actions */}
+                    <div className="flex items-center gap-3">
+                        {isConnected && address ? (
+                            <>
+                                {/* Balance */}
+                                <div className="hidden lg:flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10">
+                                    <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-lg shadow-green-500/50" />
+                                    <span className="text-sm text-gray-300 font-medium">
+                                        {parseFloat(balance?.formatted || '0').toFixed(4)} {balance?.symbol}
+                                    </span>
+                                </div>
+
+                                {/* Network Selector */}
+                                <NetworkSelector />
+
+                                {/* Profile Button */}
+                                <motion.button
+                                    whileHover={{ scale: 1.02 }}
+                                    whileTap={{ scale: 0.98 }}
+                                    onClick={() => setShowLogoutModal(true)}
+                                    className="flex items-center gap-3 px-4 py-2 rounded-xl bg-gradient-to-r from-white/5 to-white/10 border border-white/10 hover:border-red-500/30 transition-all"
+                                >
+                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-red-500 to-pink-600 flex items-center justify-center text-xs font-bold text-white">
+                                        {address.slice(2, 4).toUpperCase()}
+                                    </div>
+                                    <span className="text-sm text-white font-medium hidden sm:block">
+                                        {formatAddress(address)}
+                                    </span>
+                                </motion.button>
+                            </>
+                        ) : (
+                            <motion.button
+                                whileHover={{ scale: 1.02 }}
+                                whileTap={{ scale: 0.98 }}
+                                onClick={() => setShowConnectModal(true)}
+                                className="px-6 py-3 rounded-xl bg-gradient-to-r from-red-600 to-red-700 text-white font-semibold text-sm shadow-lg shadow-red-500/20 hover:shadow-red-500/30 transition-all"
+                            >
+                                {isLoading ? (
+                                    <span className="flex items-center gap-2">
+                                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                        Connecting...
+                                    </span>
+                                ) : (
+                                    'Connect Wallet'
+                                )}
+                            </motion.button>
+                        )}
+                    </div>
+                </div>
+            </motion.nav>
+
+            {/* Connect Modal */}
+            <AnimatePresence>
+                {showConnectModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+                        onClick={() => setShowConnectModal(false)}
+                    >
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="glass-panel-elevated p-8 max-w-md w-full mx-4 relative"
+                        >
+                            <button
+                                onClick={() => setShowConnectModal(false)}
+                                className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-colors"
+                            >
+                                ✕
+                            </button>
+
+                            <div className="text-center mb-8">
+                                <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-red-500/20 to-red-900/20 flex items-center justify-center">
+                                    <span className="text-3xl">🔐</span>
+                                </div>
+                                <h3 className="text-2xl font-bold text-white mb-2">Connect Wallet</h3>
+                                <p className="text-gray-400 text-sm">Select your preferred wallet to continue</p>
                             </div>
 
-                            {/* Network Selector */}
-                            <NetworkSelector />
+                            <div className="space-y-3">
+                                <motion.button
+                                    whileHover={{ scale: 1.01 }}
+                                    whileTap={{ scale: 0.99 }}
+                                    onClick={() => {
+                                        const metamask = connectors.find(c => c.name === 'MetaMask');
+                                        if (metamask) executeConnect(metamask);
+                                    }}
+                                    className="w-full flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10 hover:border-orange-500/50 hover:bg-white/10 transition-all group"
+                                >
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500/20 to-orange-700/20 flex items-center justify-center">
+                                            <span className="text-2xl">🦊</span>
+                                        </div>
+                                        <div className="text-left">
+                                            <span className="block text-white font-semibold group-hover:text-orange-400 transition-colors">MetaMask</span>
+                                            <span className="text-xs text-gray-500">Popular browser wallet</span>
+                                        </div>
+                                    </div>
+                                    <svg className="w-5 h-5 text-gray-500 group-hover:text-orange-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                    </svg>
+                                </motion.button>
 
-                            {/* Profile Dropdown Trigger */}
-                            <button
-                                onClick={() => setShowLogoutModal(true)}
-                                className="glass-panel px-4 py-2 text-sm flex items-center gap-2 hover:bg-white/5 hover:border-red-500/50 transition-all text-white group"
-                            >
-                                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-red-500 to-pink-600 flex items-center justify-center font-bold text-xs">
-                                    {address.substring(2, 4).toUpperCase()}
-                                </div>
-                                <span className="group-hover:text-red-400 transition-colors">{formatAddress(address)}</span>
-                            </button>
-                        </div>
-                    ) : (
-                        <button
-                            onClick={handleConnectClick}
-                            className="neon-button px-6 py-2.5 rounded-lg text-sm font-bold tracking-wide uppercase shadow-[0_0_15px_rgba(220,20,60,0.4)]"
+                                <motion.button
+                                    whileHover={{ scale: 1.01 }}
+                                    whileTap={{ scale: 0.99 }}
+                                    onClick={() => {
+                                        const core = connectors.find(c => c.name === 'Core') || connectors.find(c => c.id === 'injected');
+                                        if (core) executeConnect(core);
+                                    }}
+                                    className="w-full flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10 hover:border-blue-500/50 hover:bg-white/10 transition-all group"
+                                >
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500/20 to-blue-700/20 flex items-center justify-center">
+                                            <span className="text-2xl">💎</span>
+                                        </div>
+                                        <div className="text-left">
+                                            <span className="block text-white font-semibold group-hover:text-blue-400 transition-colors">Core / Injected</span>
+                                            <span className="text-xs text-gray-500">Browser extension</span>
+                                        </div>
+                                    </div>
+                                    <svg className="w-5 h-5 text-gray-500 group-hover:text-blue-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                    </svg>
+                                </motion.button>
+                            </div>
+
+                            <p className="text-center text-xs text-gray-500 mt-6">
+                                By connecting, you agree to our Terms of Service
+                            </p>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Logout Modal */}
+            <AnimatePresence>
+                {showLogoutModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+                        onClick={() => setShowLogoutModal(false)}
+                    >
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="glass-panel-elevated p-8 max-w-sm w-full mx-4 text-center"
                         >
-                            {isLoading ? 'Connecting...' : 'Connect Wallet'}
-                        </button>
-                    )}
-                </div>
-            </nav>
+                            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-500/10 flex items-center justify-center">
+                                <span className="text-3xl">👋</span>
+                            </div>
+                            <h3 className="text-xl font-bold text-white mb-2">Disconnect Wallet?</h3>
+                            <p className="text-gray-400 text-sm mb-8">Your session will be ended and you'll need to reconnect.</p>
 
-            {/* Connect Wallet Modal */}
-            {showConnectModal && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="glass-panel p-8 max-w-sm w-full mx-4 border-red-500/20 shadow-[0_0_50px_rgba(220,20,60,0.1)] relative">
-                        <button
-                            onClick={() => setShowConnectModal(false)}
-                            className="absolute top-4 right-4 text-gray-500 hover:text-white"
-                        >
-                            ✕
-                        </button>
-                        <h3 className="text-xl font-bold text-white mb-2 text-center">Connect Wallet</h3>
-                        <p className="text-gray-400 mb-6 text-center text-sm">Select your wallet provider to continue.</p>
-
-                        <div className="space-y-3">
-                            {/* Core Wallet Option */}
-                            <button
-                                onClick={() => {
-                                    // Try to find the specific Core/Injected connector first
-                                    const core = connectors.find(c => c.name === 'Core') || connectors.find(c => c.id === 'injected' && c.name !== 'MetaMask');
-                                    if (core) executeConnect(core);
-                                }}
-                                className="w-full flex items-center justify-between p-4 rounded-xl border border-white/10 hover:bg-white/5 hover:border-orange-500/50 transition-all group"
-                            >
-                                <span className="font-bold text-white group-hover:text-orange-400 transition-colors">
-                                    Core
-                                </span>
-                                <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center border border-white/5">
-                                    <span className="text-lg">☀️</span>
-                                </div>
-                            </button>
-
-                            {/* MetaMask Option */}
-                            <button
-                                onClick={() => {
-                                    // Try to find the specific MetaMask connector
-                                    const metamask = connectors.find(c => c.name === 'MetaMask');
-                                    if (metamask) executeConnect(metamask);
-                                }}
-                                className="w-full flex items-center justify-between p-4 rounded-xl border border-white/10 hover:bg-white/5 hover:border-yellow-500/50 transition-all group"
-                            >
-                                <span className="font-bold text-white group-hover:text-yellow-400 transition-colors">
-                                    MetaMask
-                                </span>
-                                <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center border border-white/5">
-                                    <span className="text-lg">🦊</span>
-                                </div>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Logout Confirmation Modal */}
-            {showLogoutModal && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm">
-                    <div className="glass-panel p-8 max-w-sm w-full mx-4 text-center border-red-500/20 shadow-[0_0_50px_rgba(220,20,60,0.2)]">
-                        <h3 className="text-xl font-bold text-white mb-2">Disconnect Wallet?</h3>
-                        <p className="text-gray-400 mb-8">You will be logged out of your session.</p>
-
-                        <div className="flex gap-4 justify-center">
-                            <button
-                                onClick={() => setShowLogoutModal(false)}
-                                className="px-6 py-2 rounded-lg border border-white/10 hover:bg-white/5 text-gray-300 transition-colors"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleLogout}
-                                className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg font-medium transition-colors"
-                            >
-                                Disconnect
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setShowLogoutModal(false)}
+                                    className="flex-1 px-6 py-3 rounded-xl border border-white/10 hover:bg-white/5 text-gray-300 font-medium transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleLogout}
+                                    className="flex-1 px-6 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold transition-colors"
+                                >
+                                    Disconnect
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </>
     );
 }

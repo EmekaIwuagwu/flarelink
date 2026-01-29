@@ -1,5 +1,8 @@
-import React from 'react';
-import styles from '@/styles/bridge.module.css';
+'use client';
+
+import React, { useState, useRef, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import styles from './ChainSelector.module.css';
 
 interface ChainConfig {
     id: number;
@@ -7,6 +10,7 @@ interface ChainConfig {
     symbol: string;
     bridgeAddress: `0x${string}`;
     tokenAddress: `0x${string}`;
+    explorerUrl?: string;
 }
 
 interface ChainSelectorProps {
@@ -15,8 +19,20 @@ interface ChainSelectorProps {
     exclude?: ChainConfig;
 }
 
-// ============ SUPPORTED CHAINS ============
-// These must match the chains defined in BridgeForm.tsx
+// Chain Icons (emoji placeholders - can be replaced with actual SVG icons)
+const CHAIN_ICONS: Record<number, string> = {
+    43113: '🔺',    // Avalanche
+    114: '🔥',      // Flare
+    11155111: '💎', // Ethereum
+    80002: '🟣',    // Polygon
+};
+
+const CHAIN_COLORS: Record<number, string> = {
+    43113: '#E84142',   // Avalanche Red
+    114: '#FF4D4D',     // Flare Red
+    11155111: '#627EEA', // Ethereum Blue
+    80002: '#8247E5',   // Polygon Purple
+};
 
 const CHAINS: ChainConfig[] = [
     {
@@ -49,30 +65,110 @@ const CHAINS: ChainConfig[] = [
     },
 ];
 
-
 export default function ChainSelector({ selected, onChange, exclude }: ChainSelectorProps) {
-    // Filter out excluded chain and chains without deployed bridges
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
     const availableChains = CHAINS.filter(c =>
         (!exclude || c.id !== exclude.id) &&
         c.bridgeAddress !== '0x0000000000000000000000000000000000000000'
     );
 
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const handleSelect = (chain: ChainConfig) => {
+        onChange(chain);
+        setIsOpen(false);
+    };
+
     return (
-        <div className="relative">
-            <select
-                className={styles.input}
-                value={selected.id}
-                onChange={(e) => {
-                    const chain = CHAINS.find(c => c.id === Number(e.target.value));
-                    if (chain) onChange(chain);
+        <div className={styles.container} ref={dropdownRef}>
+            {/* Selected Chain Button */}
+            <motion.button
+                className={styles.selector}
+                onClick={() => setIsOpen(!isOpen)}
+                whileTap={{ scale: 0.98 }}
+                style={{
+                    borderColor: isOpen ? CHAIN_COLORS[selected.id] + '50' : undefined,
+                    boxShadow: isOpen ? `0 0 20px ${CHAIN_COLORS[selected.id]}20` : undefined
                 }}
             >
-                {availableChains.map((chain) => (
-                    <option key={chain.id} value={chain.id}>
-                        {chain.name} ({chain.symbol})
-                    </option>
-                ))}
-            </select>
+                <div className={styles.chainInfo}>
+                    <span
+                        className={styles.chainIcon}
+                        style={{ backgroundColor: CHAIN_COLORS[selected.id] + '20' }}
+                    >
+                        {CHAIN_ICONS[selected.id]}
+                    </span>
+                    <div className={styles.chainText}>
+                        <span className={styles.chainName}>{selected.name}</span>
+                        <span className={styles.chainSymbol}>{selected.symbol}</span>
+                    </div>
+                </div>
+                <motion.svg
+                    className={styles.chevron}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    animate={{ rotate: isOpen ? 180 : 0 }}
+                    transition={{ duration: 0.2 }}
+                >
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                </motion.svg>
+            </motion.button>
+
+            {/* Dropdown Menu */}
+            <AnimatePresence>
+                {isOpen && (
+                    <motion.div
+                        className={styles.dropdown}
+                        initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                        transition={{ duration: 0.15 }}
+                    >
+                        {availableChains.map((chain) => (
+                            <motion.button
+                                key={chain.id}
+                                className={`${styles.option} ${chain.id === selected.id ? styles.optionActive : ''}`}
+                                onClick={() => handleSelect(chain)}
+                                whileHover={{ backgroundColor: 'rgba(255, 255, 255, 0.05)' }}
+                                whileTap={{ scale: 0.98 }}
+                            >
+                                <span
+                                    className={styles.chainIcon}
+                                    style={{ backgroundColor: CHAIN_COLORS[chain.id] + '20' }}
+                                >
+                                    {CHAIN_ICONS[chain.id]}
+                                </span>
+                                <div className={styles.chainText}>
+                                    <span className={styles.chainName}>{chain.name}</span>
+                                    <span className={styles.chainSymbol}>{chain.symbol}</span>
+                                </div>
+                                {chain.id === selected.id && (
+                                    <motion.span
+                                        className={styles.checkmark}
+                                        initial={{ scale: 0 }}
+                                        animate={{ scale: 1 }}
+                                    >
+                                        ✓
+                                    </motion.span>
+                                )}
+                            </motion.button>
+                        ))}
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }
